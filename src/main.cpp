@@ -22,8 +22,8 @@ struct Vec3Hash {
     template <typename T>
     size_t operator()(const Eigen::Vector3<T>& v) const {
         auto hash1 = std::hash<T>{}(v[0]);
-        auto hash2 = std::hash<T>{}(v[1]);
-        auto hash3 = std::hash<T>{}(v[2]);
+        auto hash2 = std::hash<T>{}(std::hash<T>{}(v[1]));
+        auto hash3 = std::hash<T>{}(std::hash<T>{}(std::hash<T>{}(v[2])));
         return hash1 ^ hash2 ^ hash3;
     }
 };
@@ -41,8 +41,8 @@ std::vector<Eigen::Vector3d> vel;
 
 Eigen::MatrixXd groundV;
 Eigen::MatrixXi groundF;
-double edgeLen = 10.0;
-double voxelLen = 2.0;
+double edgeLen = 5.0;
+double voxelLen = 0.5;
 
 void updateRenderGeometry()
 {           
@@ -73,10 +73,10 @@ void loadScene()
 
     points.clear();
     // generate points
-    for (size_t i = 0; i < 100; i++) {
-        Eigen::Vector3d p = {polyscope::randomUnit() * (edgeLen / 2.0), 
+    for (size_t i = 0; i < 3000; i++) {
+        Eigen::Vector3d p = {polyscope::randomUnit() * (edgeLen / 4.0) + (edgeLen / 4.0), 
                     polyscope::randomUnit() * edgeLen - (edgeLen / 2.0), 
-                    polyscope::randomUnit() * edgeLen - (edgeLen / 2.0)};
+                    polyscope::randomUnit() * (edgeLen / 2.0)};
         Eigen::Vector3d v = {0, 0, 0};
         points.push_back(p);
         vel.push_back(v);
@@ -102,8 +102,8 @@ void makegrid(int ind, std::unordered_map<Eigen::Vector3i, double, Vec3Hash> &gr
     for (int i = 0; i < n; i++) {
         Eigen::Vector3d localq;
         Eigen::Vector3d localqdot;
-        Eigen::Vector3d localCorner;
         Eigen::Vector3i localCorneri;
+        Eigen::Vector3d localCorner;
         for (int j = 0; j < 3; j++) {
             localq[j] = points[i][permutation[j]];
             localqdot[j] = vel[i][permutation[j]];
@@ -117,7 +117,7 @@ void makegrid(int ind, std::unordered_map<Eigen::Vector3i, double, Vec3Hash> &gr
             }
         }
         Eigen::Vector3i newCorneri;
-        Eigen::Vector3i newCorner;
+        Eigen::Vector3d newCorner;
         for (int ax1 = 0; ax1 <= 1; ax1++) {
             newCorneri[0] = localCorneri[0] + ax1;
             newCorner[0] = localCorner[0] + ((double) ax1) * voxelLen;
@@ -159,17 +159,18 @@ void incompressibility(std::unordered_map<Eigen::Vector3i, double, Vec3Hash> &u,
     int maxCoord = std::ceil(edgeLen / voxelLen);
 
     // Get set of cells
-    std::unordered_set<Eigen::Vector3i, Vec3Hash> waterCells = {};
+    std::unordered_map<Eigen::Vector3i, int, Vec3Hash> waterCells = {};
     for (int i = 0; i < n; i++) {
         Eigen::Vector3i pt;
         for (int j = 0; j < 3; j++) {
             pt[j] = (int) ((points[i][j] + (edgeLen / 2.0)) / voxelLen);
         }
-        waterCells.insert(pt);
+        if (waterCells.count(pt) == 0) waterCells[pt] = 0;
+        waterCells[pt]++;
     }
     // Initialize all gridpoints
     for (auto iter = waterCells.begin(); iter != waterCells.end(); iter++) {
-        Eigen::Vector3i pt = *iter;
+        Eigen::Vector3i pt = iter->first;
         if (u.count(pt) == 0) u[pt] = 0;
         if (v.count(pt) == 0) v[pt] = 0;
         if (w.count(pt) == 0) w[pt] = 0;
@@ -195,7 +196,8 @@ void incompressibility(std::unordered_map<Eigen::Vector3i, double, Vec3Hash> &u,
     }
     for (auto iter = v.begin(); iter != v.end(); iter++) {
         int ind = (iter->first)[1];
-        if (ind == minCoord || ind == maxCoord) v[iter->first] = 0;
+        // TODO: Adding this adds a roof (see two below)
+        if (ind == minCoord/* || ind == maxCoord*/) v[iter->first] = 0;
     }
     for (auto iter = w.begin(); iter != w.end(); iter++) {
         int ind = (iter->first)[2];
@@ -203,9 +205,10 @@ void incompressibility(std::unordered_map<Eigen::Vector3i, double, Vec3Hash> &u,
     }
     // Repeatedly enforce incompressibility
     // TODO: Parameterize
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < 10; i++) {
         for (auto iter = waterCells.begin(); iter != waterCells.end(); iter++) {
-            Eigen::Vector3i pt = *iter;
+            Eigen::Vector3i pt = iter->first;
+            int density = iter->second;
             double d = 0;
             double s = 0;
             // Sum up d and s
@@ -228,7 +231,8 @@ void incompressibility(std::unordered_map<Eigen::Vector3i, double, Vec3Hash> &u,
             }
             pt[0]--;
             pt[1]++;
-            if (pt[1] != minCoord && pt[1] != maxCoord) {
+            // TODO: Adding this adds a roof (see one above and below)
+            if (pt[1] != minCoord/* && pt[1] != maxCoord*/) {
                 d += v[pt];
                 s++;
             }
@@ -239,11 +243,16 @@ void incompressibility(std::unordered_map<Eigen::Vector3i, double, Vec3Hash> &u,
                 s++;
             }
             pt[2]--;
+
+            // TODO: Add parameterization for density
+            d -= 2.0 * (density - 2);
+
             // Edit d and s
             if (pt[0] != minCoord && pt[0] != maxCoord) {
                 u[pt] += d / s;
             }
-            if (pt[1] != minCoord && pt[1] != maxCoord) {
+            // TODO: Adding this adds a roof (see two above)
+            if (pt[1] != minCoord/* && pt[1] != maxCoord*/) {
                 v[pt] += d / s;
             }
             if (pt[2] != minCoord && pt[2] != maxCoord) {
@@ -279,8 +288,8 @@ void fromgrid(int ind, std::unordered_map<Eigen::Vector3i, double, Vec3Hash> gri
     for (int i = 0; i < n; i++) {
         Eigen::Vector3d localq;
         Eigen::Vector3d localqdot;
-        Eigen::Vector3d localCorner;
         Eigen::Vector3i localCorneri;
+        Eigen::Vector3d localCorner;
         for (int j = 0; j < 3; j++) {
             localq[j] = points[i][permutation[j]];
             localqdot[j] = vel[i][permutation[j]];
@@ -294,7 +303,7 @@ void fromgrid(int ind, std::unordered_map<Eigen::Vector3i, double, Vec3Hash> gri
             }
         }
         Eigen::Vector3i newCorneri;
-        Eigen::Vector3i newCorner;
+        Eigen::Vector3d newCorner;
         double velocity = 0;
         double weightSum = 0;
         for (int ax1 = 0; ax1 <= 1; ax1++) {
@@ -320,7 +329,7 @@ void fromgrid(int ind, std::unordered_map<Eigen::Vector3i, double, Vec3Hash> gri
                 }
             }
         }
-        vel[i][ind] = vel[i][ind] * 0.5 + (velocity / weightSum) * 0.5;
+        vel[i][ind] = vel[i][ind] * 0.1 + (velocity / weightSum) * 0.9;
     }
 }
 
@@ -461,7 +470,7 @@ int main(int argc, char **argv)
 
 
         // visualize!
-        polyscope::PointCloud* psCloud = polyscope::registerPointCloud("really great points", points);
+        polyscope::PointCloud* psCloud = polyscope::registerPointCloud("Points", points);
         // set some options
         psCloud->setPointRadius(0.005);
 
