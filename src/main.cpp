@@ -41,7 +41,7 @@ std::vector<Eigen::Vector3d> vel;
 
 Eigen::MatrixXd groundV;
 Eigen::MatrixXi groundF;
-double edgeLen = 5.0;
+double edgeLen = 8.0;
 double voxelLen = 0.5;
 
 void updateRenderGeometry()
@@ -73,7 +73,7 @@ void loadScene()
 
     points.clear();
     // generate points
-    for (size_t i = 0; i < 3000; i++) {
+    for (size_t i = 0; i < 5000; i++) {
         Eigen::Vector3d p = {polyscope::randomUnit() * (edgeLen / 4.0) + (edgeLen / 4.0), 
                     polyscope::randomUnit() * edgeLen - (edgeLen / 2.0), 
                     polyscope::randomUnit() * (edgeLen / 2.0)};
