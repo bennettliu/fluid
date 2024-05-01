@@ -87,15 +87,31 @@ void processGravityForce(Eigen::VectorXd& F)
     }
 }
 
-void processPenaltyForce(Eigen::VectorXd& F) {
+void penalize(Eigen::VectorXd& F, Eigen::Vector3d dir, double threshold) {
     int n = points.size();
     // Floor force
     for (int i = 0; i < n; i++) {
-        if (points[i][1] < -1.0) {
-            double force = params_.penaltyStiffness * (1.0 - points[i][1]);
-            F[i * 3 + 1] += force;
+        Eigen::Vector3d pos = points[i];
+        double dist = (dir.dot(pos)) - threshold;
+        if (dist > 0.0) {
+            Eigen::Vector3d force = - params_.penaltyStiffness * dist * dir;
+            if (dir.dot(vel[i]) < 0) force *= params_.coefficientOfRestitution;
+            for (int j = 0; j < 3; j++) {
+                F[i * 3 + j] += force[j];
+            }
         }
     }
+}
+
+void processPenaltyForce(Eigen::VectorXd& F) {
+    int n = points.size();
+    // Floor/wall forces
+    penalize(F, {0, -1, 0}, 1.0);
+    penalize(F, {0, 1, 0}, 4.0);
+    penalize(F, {-1, 0, 0}, 5.0);
+    penalize(F, {1, 0, 0}, 5.0);
+    penalize(F, {0, 0, -1}, 5.0);
+    penalize(F, {0, 0, 1}, 5.0);
 }
 
 void computeForce(const Eigen::VectorXd& q, Eigen::VectorXd& F)
