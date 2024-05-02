@@ -89,6 +89,48 @@ void initSimulation()
     loadScene();
 }
 
+void dispersal() {
+    int n = points.size();
+    std::unordered_map<Eigen::Vector3i, std::vector<int>, Vec3Hash> dispersalGrid;
+    for (int i = 0; i < n; i++) {
+        Eigen::Vector3i voxel;
+        for (int j = 0; j < 3; j++) {
+            voxel[j] = (int) ((points[i][j] + (edgeLen / 2.0)) / voxelLen);
+        }
+        if (dispersalGrid.count(voxel) == 0) dispersalGrid[voxel] = {};
+        dispersalGrid[voxel].push_back(i);
+    }
+    for (auto iter = dispersalGrid.begin(); iter != dispersalGrid.end(); iter++) {
+        Eigen::Vector3i voxel = iter->first;
+        std::vector<int> closeInds = {};
+        Eigen::Vector3i newvoxel;
+        for (int ax1 = 0; ax1 <= 1; ax1++) {
+            newvoxel[0] = voxel[0] + ax1;
+            for (int ax2 = 0; ax2 <= 1; ax2++) {
+                newvoxel[1] = voxel[1] + ax2;
+                for (int ax3 = 0; ax3 <= 1; ax3++) {
+                    newvoxel[2] = voxel[2] + ax3;
+                    if (dispersalGrid.count(newvoxel)) {
+                        closeInds.insert(closeInds.end(), dispersalGrid[newvoxel].begin(), dispersalGrid[newvoxel].end());
+                    }
+                }
+            }
+        }
+        // TODO: Paramaterize
+        double dispersalForce = 2.0;
+        for (int i = 0; i < closeInds.size(); i++) {
+            for (int j = i + 1; j < closeInds.size(); j++) {
+                Eigen::Vector3d diff = points[i] - points[j];
+                if (diff.norm() < voxelLen) {
+                    Eigen::Vector3d F = dispersalForce * diff.normalized() * (voxelLen - diff.norm());
+                    vel[i] += F;
+                    vel[j] -= F;
+                }
+            }
+        }
+    }
+}
+
 void makegrid(int ind, std::unordered_map<Eigen::Vector3i, double, Vec3Hash> &grid) {
     std::vector<int> permutation = std::vector<int>();
     permutation.push_back(ind);
@@ -208,7 +250,7 @@ void incompressibility(std::unordered_map<Eigen::Vector3i, double, Vec3Hash> &u,
     for (int i = 0; i < 10; i++) {
         for (auto iter = waterCells.begin(); iter != waterCells.end(); iter++) {
             Eigen::Vector3i pt = iter->first;
-            int density = iter->second;
+            double density = iter->second;
             double d = 0;
             double s = 0;
             // Sum up d and s
@@ -245,7 +287,7 @@ void incompressibility(std::unordered_map<Eigen::Vector3i, double, Vec3Hash> &u,
             pt[2]--;
 
             // TODO: Add parameterization for density
-            d -= 2.0 * (density - 2);
+            d -= 2.0 * (density - 2.0);
 
             // Edit d and s
             if (pt[0] != minCoord && pt[0] != maxCoord) {
@@ -338,6 +380,8 @@ void simulateOneStep()
     double h = params_.timeStep;
     time_ += h;
     int n = points.size();
+
+    dispersal();
 
     // point vel -> grid vel
     std::unordered_map<Eigen::Vector3i, double, Vec3Hash> u, v, w;
@@ -472,7 +516,7 @@ int main(int argc, char **argv)
         // visualize!
         polyscope::PointCloud* psCloud = polyscope::registerPointCloud("Points", points);
         // set some options
-        psCloud->setPointRadius(0.005);
+        psCloud->setPointRadius(0.05, false);
 
       polyscope::frameTick();
   }
