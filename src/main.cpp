@@ -42,7 +42,7 @@ std::vector<Eigen::Vector3d> vel;
 Eigen::MatrixXd groundV;
 Eigen::MatrixXi groundF;
 double edgeLen = 8.0;
-double voxelLen = 0.5;
+double voxelLen = 0.4;
 
 void updateRenderGeometry()
 {           
@@ -81,6 +81,25 @@ void loadScene()
         points.push_back(p);
         vel.push_back(v);
     }
+    // for (size_t i = 0; i < 3000; i++) {
+    //     Eigen::Vector3d p = {
+    //         polyscope::randomUnit() * edgeLen - (edgeLen / 2.0), 
+    //         polyscope::randomUnit() * (edgeLen / 4.0) - (edgeLen / 2.0), 
+    //         polyscope::randomUnit() * edgeLen - (edgeLen / 2.0)};
+    //     Eigen::Vector3d v = {0, 0, 0};
+    //     points.push_back(p);
+    //     vel.push_back(v);
+    // }
+    // for (size_t i = 0; i < 200; i++) {
+    //     double sideLen = edgeLen / 10.0;
+    //     Eigen::Vector3d p = {
+    //         polyscope::randomUnit() * sideLen - (sideLen / 2.0), 
+    //         edgeLen - polyscope::randomUnit() * sideLen, 
+    //         polyscope::randomUnit() * sideLen - (sideLen / 2.0)};
+    //     Eigen::Vector3d v = {0, 0, 0};
+    //     points.push_back(p);
+    //     vel.push_back(v);
+    // }
 }
 
 void initSimulation()
