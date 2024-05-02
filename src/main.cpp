@@ -72,7 +72,8 @@ void loadScene()
     templates_.clear();
 
     points.clear();
-    // generate points
+    vel.clear();
+    // CORNER TEST
     for (size_t i = 0; i < 5000; i++) {
         Eigen::Vector3d p = {polyscope::randomUnit() * (edgeLen / 4.0) + (edgeLen / 4.0), 
                     polyscope::randomUnit() * edgeLen - (edgeLen / 2.0), 
@@ -81,6 +82,20 @@ void loadScene()
         points.push_back(p);
         vel.push_back(v);
     }
+
+    // COLLISION TEST
+    // for (size_t i = 0; i < 3000; i++) {
+    //     double x = polyscope::randomUnit() * edgeLen - (edgeLen / 2.0);
+    //     double y = polyscope::randomUnit() * edgeLen - (edgeLen / 2.0);
+    //     Eigen::Vector3d p = {x, 
+    //                 polyscope::randomUnit() * (edgeLen) / 8.0 - (edgeLen / 2.0), 
+    //                 y};
+    //     Eigen::Vector3d v = {-x * 100.0, 0, -y * 50.0};
+    //     points.push_back(p);
+    //     vel.push_back(v);
+    // }
+
+    // DROP TEST
     // for (size_t i = 0; i < 3000; i++) {
     //     Eigen::Vector3d p = {
     //         polyscope::randomUnit() * edgeLen - (edgeLen / 2.0), 
@@ -121,14 +136,16 @@ void dispersal() {
     }
     for (auto iter = dispersalGrid.begin(); iter != dispersalGrid.end(); iter++) {
         Eigen::Vector3i voxel = iter->first;
+        std::vector<int> blockInds = iter->second;
         std::vector<int> closeInds = {};
         Eigen::Vector3i newvoxel;
-        for (int ax1 = 0; ax1 <= 1; ax1++) {
+        for (int ax1 = -1; ax1 <= 1; ax1++) {
             newvoxel[0] = voxel[0] + ax1;
-            for (int ax2 = 0; ax2 <= 1; ax2++) {
+            for (int ax2 = -1; ax2 <= 1; ax2++) {
                 newvoxel[1] = voxel[1] + ax2;
-                for (int ax3 = 0; ax3 <= 1; ax3++) {
+                for (int ax3 = -1; ax3 <= 1; ax3++) {
                     newvoxel[2] = voxel[2] + ax3;
+                    if (ax1 == 0 && ax2 == 0 && ax3 == 0) continue;
                     if (dispersalGrid.count(newvoxel)) {
                         closeInds.insert(closeInds.end(), dispersalGrid[newvoxel].begin(), dispersalGrid[newvoxel].end());
                     }
@@ -137,13 +154,26 @@ void dispersal() {
         }
         // TODO: Paramaterize
         double dispersalForce = 2.0;
-        for (int i = 0; i < closeInds.size(); i++) {
-            for (int j = i + 1; j < closeInds.size(); j++) {
-                Eigen::Vector3d diff = points[i] - points[j];
+        for (int i = 0; i < blockInds.size(); i++) {
+            for (int j = i + 1; j < blockInds.size(); j++) {
+                int x = blockInds[i];
+                int y = blockInds[j];
+                Eigen::Vector3d diff = points[x] - points[y];
                 if (diff.norm() < voxelLen) {
                     Eigen::Vector3d F = dispersalForce * diff.normalized() * (voxelLen - diff.norm());
-                    vel[i] += F;
-                    vel[j] -= F;
+                    vel[x] += F;
+                    vel[y] -= F;
+                }
+            }
+        }
+        for (int i = 0; i < blockInds.size(); i++) {
+            for (int j = 0; j < closeInds.size(); j++) {
+                int x = blockInds[i];
+                int y = closeInds[j];
+                Eigen::Vector3d diff = points[x] - points[y];
+                if (diff.norm() < voxelLen) {
+                    Eigen::Vector3d F = dispersalForce * diff.normalized() * (voxelLen - diff.norm());
+                    vel[x] += F;
                 }
             }
         }
@@ -229,25 +259,12 @@ void incompressibility(std::unordered_map<Eigen::Vector3i, double, Vec3Hash> &u,
         if (waterCells.count(pt) == 0) waterCells[pt] = 0;
         waterCells[pt]++;
     }
-    // Initialize all gridpoints
-    for (auto iter = waterCells.begin(); iter != waterCells.end(); iter++) {
-        Eigen::Vector3i pt = iter->first;
-        if (u.count(pt) == 0) u[pt] = 0;
-        if (v.count(pt) == 0) v[pt] = 0;
-        if (w.count(pt) == 0) w[pt] = 0;
-        pt[0]++;
-        if (u.count(pt) == 0) u[pt] = 0;
-        pt[0]--;
-        pt[1]++;
-        if (v.count(pt) == 0) v[pt] = 0;
-        pt[1]--;
-        pt[2]++;
-        if (w.count(pt) == 0) w[pt] = 0;
-    }
     // Apply gravity
     for (auto iter = v.begin(); iter != v.end(); iter++) {
-        Eigen::Vector3i pt = iter->first;
-        v[iter->first] -= params_.gravityG;
+        int ind = (iter->first)[1];
+        if (ind > minCoord) {
+            v[iter->first] -= params_.gravityG;
+        }
     }
 
     // Set all walls to zero
@@ -277,7 +294,7 @@ void incompressibility(std::unordered_map<Eigen::Vector3i, double, Vec3Hash> &u,
                 d -= u[pt];
                 s++;
             }
-            if (pt[1] != minCoord && pt[1] != maxCoord) {
+            if (pt[1] != minCoord) {
                 d -= v[pt];
                 s++;
             }
@@ -292,8 +309,7 @@ void incompressibility(std::unordered_map<Eigen::Vector3i, double, Vec3Hash> &u,
             }
             pt[0]--;
             pt[1]++;
-            // TODO: Adding this adds a roof (see one above and below)
-            if (pt[1] != minCoord/* && pt[1] != maxCoord*/) {
+            if (pt[1] != minCoord) {
                 d += v[pt];
                 s++;
             }
@@ -312,8 +328,7 @@ void incompressibility(std::unordered_map<Eigen::Vector3i, double, Vec3Hash> &u,
             if (pt[0] != minCoord && pt[0] != maxCoord) {
                 u[pt] += d / s;
             }
-            // TODO: Adding this adds a roof (see two above)
-            if (pt[1] != minCoord/* && pt[1] != maxCoord*/) {
+            if (pt[1] != minCoord) {
                 v[pt] += d / s;
             }
             if (pt[2] != minCoord && pt[2] != maxCoord) {
@@ -325,7 +340,7 @@ void incompressibility(std::unordered_map<Eigen::Vector3i, double, Vec3Hash> &u,
             }
             pt[0]--;
             pt[1]++;
-            if (pt[1] != minCoord && pt[1] != maxCoord) {
+            if (pt[1] != minCoord) {
                 v[pt] -= d / s;
             }
             pt[1]--;
@@ -338,7 +353,7 @@ void incompressibility(std::unordered_map<Eigen::Vector3i, double, Vec3Hash> &u,
     }
 }
 
-void fromgrid(int ind, std::unordered_map<Eigen::Vector3i, double, Vec3Hash> grid) {
+void fromgrid(int ind, std::unordered_map<Eigen::Vector3i, double, Vec3Hash> gridsolve, std::unordered_map<Eigen::Vector3i, double, Vec3Hash> grid) {
     std::vector<int> permutation = std::vector<int>();
     permutation.push_back(ind);
     for (int i = 0; i < 3; i++) {
@@ -365,7 +380,8 @@ void fromgrid(int ind, std::unordered_map<Eigen::Vector3i, double, Vec3Hash> gri
         }
         Eigen::Vector3i newCorneri;
         Eigen::Vector3d newCorner;
-        double velocity = 0;
+        double picvel = 0;
+        double flipvel = 0;
         double weightSum = 0;
         for (int ax1 = 0; ax1 <= 1; ax1++) {
             newCorneri[0] = localCorneri[0] + ax1;
@@ -385,12 +401,21 @@ void fromgrid(int ind, std::unordered_map<Eigen::Vector3i, double, Vec3Hash> gri
                     for (int j = 0; j < 3; j++) {
                         globalCorneri[permutation[j]] = newCorneri[j];
                     }
-                    velocity += weight * grid[globalCorneri];
+                    picvel += weight * gridsolve[globalCorneri];
+                    flipvel += weight * (gridsolve[globalCorneri] - grid[globalCorneri]);
                     weightSum += weight;
                 }
             }
         }
-        vel[i][ind] = vel[i][ind] * 0.1 + (velocity / weightSum) * 0.9;
+        picvel = picvel / weightSum;
+        flipvel = vel[i][ind] + (flipvel / weightSum);
+        double pic = 0.1;
+        double closeness = std::fabs(points[i][ind] + edgeLen / 2.0);
+        if (ind != 1) {
+            closeness = std::min(closeness, std::fabs(points[i][ind] - edgeLen / 2.0));
+        }
+        if (closeness < voxelLen) pic = 1.0;
+        vel[i][ind] = pic * picvel + (1.0 - pic) * flipvel;
     }
 }
 
@@ -408,17 +433,28 @@ void simulateOneStep()
     makegrid(1, v);
     makegrid(2, w);
 
+    std::unordered_map<Eigen::Vector3i, double, Vec3Hash> usolve, vsolve, wsolve;
+    usolve = u;
+    vsolve = v;
+    wsolve = w;
+
     // enforce incompressibility
-    incompressibility(u, v, w);
+    incompressibility(usolve, vsolve, wsolve);
 
     // grid vel -> point vel
-    fromgrid(0, u);
-    fromgrid(1, v);
-    fromgrid(2, w);
+    fromgrid(0, usolve, u);
+    fromgrid(1, vsolve, v);
+    fromgrid(2, wsolve, w);
 
     // update points
     for (int i = 0; i < n; i++) {
         points[i] += vel[i] * h;
+        // backup clamping
+        for (int j = 0; j < 3; j++) {
+            if (points[i][j] <= -(edgeLen / 2.0) || (points[i][j] >= (edgeLen / 2.0) && j != 1)) {
+                points[i][j] -= vel[i][j] * h;
+            }
+        }
     }
 }
 
