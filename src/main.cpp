@@ -124,7 +124,7 @@ void loadScene()
             }
             break;
         case 3: {
-            std::ifstream file("../meshes/bunny.txt");
+            std::ifstream file("../points/bunny.txt");
             float x, y, z;
             while (file >> x >> y >> z) {
                 // Store the floats in a vector and add it to the lines vector
