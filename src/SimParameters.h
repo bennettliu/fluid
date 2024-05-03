@@ -14,6 +14,8 @@ struct SimParameters
         penaltyEnabled = true;
         penaltyStiffness = 1000.0;
         coefficientOfRestitution = 0.9;
+        particleAdditionMode = false;
+        example = 2;
     }
 
     double timeStep;
@@ -25,6 +27,8 @@ struct SimParameters
     bool penaltyEnabled;
     double penaltyStiffness;
     double coefficientOfRestitution;
+    bool particleAdditionMode;
+    int example;
 };
 
 #endif

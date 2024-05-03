@@ -7,6 +7,7 @@
 #include <iostream>
 #include <unordered_set>
 #include <utility>
+#include <algorithm>
 #include <deque>
 #include <Eigen/Sparse>
 #include <Eigen/Dense>
@@ -31,11 +32,7 @@ struct Vec3Hash {
 bool running_;
 double time_;
 SimParameters params_;
-std::string sceneFile_;
-bool launch_;
 
-std::vector<RigidBodyTemplate*> templates_;
-std::vector<RigidBodyInstance*> bodies_;
 std::vector<Eigen::Vector3d> points;
 std::vector<Eigen::Vector3d> vel;
 
@@ -43,6 +40,15 @@ Eigen::MatrixXd groundV;
 Eigen::MatrixXi groundF;
 double edgeLen = 8.0;
 double voxelLen = 0.4;
+
+struct MouseClick
+{
+    double x;
+    double y;
+    double z;
+};
+
+std::deque<MouseClick> mouseClicks_;
 
 void updateRenderGeometry()
 {           
@@ -64,57 +70,58 @@ void updateRenderGeometry()
 
 void loadScene()
 {
-    for (RigidBodyInstance* rbi : bodies_)
-        delete rbi;
-    for (RigidBodyTemplate* rbt : templates_)
-        delete rbt;
-    bodies_.clear();
-    templates_.clear();
-
     points.clear();
     vel.clear();
-    // CORNER TEST
-    for (size_t i = 0; i < 5000; i++) {
-        Eigen::Vector3d p = {polyscope::randomUnit() * (edgeLen / 4.0) + (edgeLen / 4.0), 
+
+    switch(params_.example) {
+        // CORNER TEST
+        case 0:
+            for (size_t i = 0; i < 5000; i++) {
+                Eigen::Vector3d p = {polyscope::randomUnit() * (edgeLen / 4.0) + (edgeLen / 4.0), 
+                            polyscope::randomUnit() * edgeLen - (edgeLen / 2.0), 
+                            polyscope::randomUnit() * (edgeLen / 2.0)};
+                Eigen::Vector3d v = {0, 0, 0};
+                points.push_back(p);
+                vel.push_back(v);
+            }
+            break;
+
+        // WHIRLPOOL TEST
+        case 1:
+            for (size_t i = 0; i < 8000; i++) {
+                double x = polyscope::randomUnit() * edgeLen - (edgeLen / 2.0);
+                double y = polyscope::randomUnit() * edgeLen - (edgeLen / 2.0);
+                Eigen::Vector3d p = {x, 
+                            polyscope::randomUnit() * (edgeLen) / 7.0 - (edgeLen / 2.0), 
+                            y};
+                Eigen::Vector3d v = {y * 50.0, 0, -x * 50.0};
+                points.push_back(p);
+                vel.push_back(v);
+            }
+            break;
+
+        // DROP TEST
+        case 2:
+            for (size_t i = 0; i < 6000; i++) {
+                Eigen::Vector3d p = {
                     polyscope::randomUnit() * edgeLen - (edgeLen / 2.0), 
-                    polyscope::randomUnit() * (edgeLen / 2.0)};
-        Eigen::Vector3d v = {0, 0, 0};
-        points.push_back(p);
-        vel.push_back(v);
+                    polyscope::randomUnit() * (edgeLen / 4.0) - (edgeLen / 2.0), 
+                    polyscope::randomUnit() * edgeLen - (edgeLen / 2.0)};
+                Eigen::Vector3d v = {0, 0, 0};
+                points.push_back(p);
+                vel.push_back(v);
+            }
+            for (size_t i = 0; i < 500; i++) {
+                double sideLen = edgeLen / 10.0;
+                Eigen::Vector3d p = {
+                    polyscope::randomUnit() * sideLen - (sideLen / 2.0), 
+                    edgeLen - polyscope::randomUnit() * sideLen, 
+                    polyscope::randomUnit() * sideLen - (sideLen / 2.0)};
+                Eigen::Vector3d v = {0, -1000.0, 0};
+                points.push_back(p);
+                vel.push_back(v);
+            }
     }
-
-    // COLLISION TEST
-    // for (size_t i = 0; i < 3000; i++) {
-    //     double x = polyscope::randomUnit() * edgeLen - (edgeLen / 2.0);
-    //     double y = polyscope::randomUnit() * edgeLen - (edgeLen / 2.0);
-    //     Eigen::Vector3d p = {x, 
-    //                 polyscope::randomUnit() * (edgeLen) / 8.0 - (edgeLen / 2.0), 
-    //                 y};
-    //     Eigen::Vector3d v = {-x * 100.0, 0, -y * 50.0};
-    //     points.push_back(p);
-    //     vel.push_back(v);
-    // }
-
-    // DROP TEST
-    // for (size_t i = 0; i < 3000; i++) {
-    //     Eigen::Vector3d p = {
-    //         polyscope::randomUnit() * edgeLen - (edgeLen / 2.0), 
-    //         polyscope::randomUnit() * (edgeLen / 4.0) - (edgeLen / 2.0), 
-    //         polyscope::randomUnit() * edgeLen - (edgeLen / 2.0)};
-    //     Eigen::Vector3d v = {0, 0, 0};
-    //     points.push_back(p);
-    //     vel.push_back(v);
-    // }
-    // for (size_t i = 0; i < 200; i++) {
-    //     double sideLen = edgeLen / 10.0;
-    //     Eigen::Vector3d p = {
-    //         polyscope::randomUnit() * sideLen - (sideLen / 2.0), 
-    //         edgeLen - polyscope::randomUnit() * sideLen, 
-    //         polyscope::randomUnit() * sideLen - (sideLen / 2.0)};
-    //     Eigen::Vector3d v = {0, 0, 0};
-    //     points.push_back(p);
-    //     vel.push_back(v);
-    // }
 }
 
 void initSimulation()
@@ -154,8 +161,8 @@ void dispersal() {
         }
         // TODO: Paramaterize
         double dispersalForce = 2.0;
-        for (int i = 0; i < blockInds.size(); i++) {
-            for (int j = i + 1; j < blockInds.size(); j++) {
+        for (size_t i = 0; i < blockInds.size(); i++) {
+            for (size_t j = i + 1; j < blockInds.size(); j++) {
                 int x = blockInds[i];
                 int y = blockInds[j];
                 Eigen::Vector3d diff = points[x] - points[y];
@@ -166,8 +173,8 @@ void dispersal() {
                 }
             }
         }
-        for (int i = 0; i < blockInds.size(); i++) {
-            for (int j = 0; j < closeInds.size(); j++) {
+        for (size_t i = 0; i < blockInds.size(); i++) {
+            for (size_t j = 0; j < closeInds.size(); j++) {
                 int x = blockInds[i];
                 int y = closeInds[j];
                 Eigen::Vector3d diff = points[x] - points[y];
@@ -480,33 +487,59 @@ void callback()
             initSimulation();
         }        
     }
-    if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        ImGui::InputText("Filename", &sceneFile_);
-        if (ImGui::Button("Load Scene", ImVec2(-1, 0)))
-        {
+    ImGui::Checkbox("Add Particles", &params_.particleAdditionMode);
+    if (ImGui::CollapsingHeader("Example Fluids", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui::Selectable("Corner")) {
+            params_.example = 0;
             loadScene();
-            initSimulation();
+        }
+        if (ImGui::Selectable("Whirlpool")) {
+            params_.example = 1;
+            loadScene();
+        }
+        if (ImGui::Selectable("Drop")) {
+            params_.example = 2;
+            loadScene();
         }
     }
-    if (ImGui::CollapsingHeader("Simulation Options", ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        ImGui::InputDouble("Timestep", &params_.timeStep);
-        ImGui::InputDouble("Newton Tolerance", &params_.NewtonTolerance);
-        ImGui::InputInt("Newton Max Iters", &params_.NewtonMaxIters);
-    }
-    if (ImGui::CollapsingHeader("Forces", ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        ImGui::Checkbox("Gravity Enabled", &params_.gravityEnabled);
-        ImGui::InputDouble("Gravity G", &params_.gravityG);
-        ImGui::Checkbox("Penalty Forces Enabled", &params_.penaltyEnabled);
-        ImGui::InputDouble("Penalty Stiffness", &params_.penaltyStiffness);
-        ImGui::InputDouble("Coefficient of Restitution", &params_.coefficientOfRestitution);
-    }    
 
-    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Space)))
-    {
-        launch_ = true;
+    ImGuiIO& io = ImGui::GetIO();
+    io.DisplayFramebufferScale = ImVec2(1, 1);
+    // this now only works on macs with retina displays - maybe funky on older macbook airs?
+    // more robust solution is documented here: https://github.com/ocornut/imgui/issues/5081
+    #if defined(__APPLE__)
+        io.DisplayFramebufferScale = ImVec2(2,2); 
+    #endif
+
+    if (params_.particleAdditionMode && (io.MouseClicked[0] || ImGui::IsMouseDragging(0))) { 
+        MouseClick mc;
+        glm::vec2 screenCoords{ io.MousePos.x, io.MousePos.y };
+        int xInd, yInd;
+        std::tie(xInd, yInd) = polyscope::view::screenCoordsToBufferInds(screenCoords);
+
+        glm::mat4 view = polyscope::view::getCameraViewMatrix();
+        glm::mat4 viewInv = glm::inverse(view);
+        glm::mat4 proj = polyscope::view::getCameraPerspectiveMatrix();
+        glm::mat4 projInv = glm::inverse(proj);
+
+        glm::vec4 ndc = proj * view * glm::vec4(1,1,1,1);
+        ndc /= ndc[3];
+        double clickedDepth = ndc[2];
+
+        // convert depth to world units
+        glm::vec2 screenPos{ screenCoords.x / static_cast<float>(polyscope::view::windowWidth),
+                            1.f - screenCoords.y / static_cast<float>(polyscope::view::windowHeight) };
+        float z = clickedDepth;
+        glm::vec4 clipPos = glm::vec4(screenPos * 2.0f - 1.0f, z, 1.0f);
+        glm::vec4 viewPos = projInv * clipPos;
+        viewPos /= viewPos.w;
+
+        glm::vec4 worldPos = viewInv * viewPos;
+        worldPos /= worldPos.w;
+        mc.x = worldPos[0];
+        mc.y = worldPos[1];
+        mc.z = worldPos[2];
+        mouseClicks_.push_back(mc);
     }
 
     ImGui::End();
@@ -514,68 +547,60 @@ void callback()
 
 int main(int argc, char **argv) 
 {
-  polyscope::view::setWindowSize(1600, 800);
-  polyscope::options::buildGui = false;
-  polyscope::options::openImGuiWindowForUserCallback = false;
-  polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::None;
+    polyscope::view::setWindowSize(1600, 800);
+    polyscope::options::buildGui = true;
+    polyscope::options::openImGuiWindowForUserCallback = false;
+    polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::None;
 
-  polyscope::options::autocenterStructures = false;
-  polyscope::options::autoscaleStructures = false;
-  polyscope::options::maxFPS = -1;
+    polyscope::options::autocenterStructures = false;
+    polyscope::options::autoscaleStructures = false;
+    polyscope::options::maxFPS = -1;
 
-  sceneFile_ = "box.scn";
-  launch_ = false;
+    initSimulation();
 
-  initSimulation();
+    polyscope::init();
 
-  polyscope::init();
+    polyscope::state::userCallback = callback;
 
-  polyscope::state::userCallback = callback;
+    while (!polyscope::render::engine->windowRequestsClose())
+    {
+        if (running_)
+            simulateOneStep();
+        updateRenderGeometry();
 
-  while (!polyscope::render::engine->windowRequestsClose())
-  {
-      if (running_)
-          simulateOneStep();
-      updateRenderGeometry();
+        polyscope::registerSurfaceMesh("Ground", groundV, groundF);
 
-      if (launch_)
-      {
-          double launchVel = 100;
-          Eigen::Vector3d launchPos;
-          for (int i = 0; i < 3; i++)
-              launchPos[i] = polyscope::view::getCameraWorldPosition()[i];
-          
-          Eigen::Vector3d launchDir;
-          glm::vec3 look;
-          glm::vec3 dummy;
-          polyscope::view::getCameraFrame(look, dummy, dummy);
-          for (int i = 0; i < 3; i++)
-              launchDir[i] = look[i];
-
-            // Launch a bird
-            RigidBodyTemplate* rbt = new RigidBodyTemplate("../meshes/bird2.obj", 0.5);
-            double rho = 1.0;
-            Eigen::Vector3d theta = {0, -3.14 / 2.0, 0};
-            Eigen::Vector3d w = {100, 0, 0};
-            w.setZero();
-            RigidBodyInstance* rbi = new RigidBodyInstance(*rbt, launchPos, launchDir, launchVel * launchDir, w, rho);
-            templates_.push_back(rbt);
-            bodies_.push_back(rbi);
-
-          launch_ = false;
-      }
-
-      polyscope::registerSurfaceMesh("Ground", groundV, groundF);
-
-
-        // visualize!
         polyscope::PointCloud* psCloud = polyscope::registerPointCloud("Points", points);
+
+        double maxspeed = 300.0;
+        for (size_t i = 0; i < vel.size(); i++) {
+            maxspeed = std::max(vel[i].norm(), maxspeed);
+        }
+
+        std::vector<std::array<double, 3>> speedcolor(points.size());
+        for (size_t i = 0; i < vel.size(); i++) {
+            double speed = vel[i].norm();
+            glm::vec3 blue = {0, 0, 1};
+            glm::vec3 white = {1, 1, 1};
+            float grad = glm::clamp(speed/maxspeed, 0.0, 1.0);
+            glm::vec3 res = grad * white + (1.0f - grad) * blue;
+            speedcolor[i] = {{res.x, res.y, res.z}};
+        }
+
+        psCloud->addColorQuantity("particle speed", speedcolor)->setEnabled(true);
         // set some options
         psCloud->setPointRadius(0.05, false);
 
-      polyscope::frameTick();
-  }
+        polyscope::frameTick();
+        while (!mouseClicks_.empty())
+        {
+            MouseClick mc = mouseClicks_.front();
+            mouseClicks_.pop_front();
+            points.push_back({mc.x, mc.y, mc.z});
+            vel.push_back({0, 0, 0});
+        }
+    }
 
-  return 0;
+    return 0;
 }
 
