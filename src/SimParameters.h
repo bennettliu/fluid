@@ -15,7 +15,12 @@ struct SimParameters
         penaltyStiffness = 1000.0;
         coefficientOfRestitution = 0.9;
         particleAdditionMode = false;
+        particleDragMode = false;
         example = 2;
+        ratio = 0.1;
+        iters = 10;
+        dispersalForce = 2.0;
+        density = 2.0;
     }
 
     double timeStep;
@@ -28,7 +33,12 @@ struct SimParameters
     double penaltyStiffness;
     double coefficientOfRestitution;
     bool particleAdditionMode;
+    bool particleDragMode;
     int example;
+    float ratio;
+    int iters;
+    float dispersalForce;
+    float density;
 };
 
 #endif

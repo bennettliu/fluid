@@ -4,6 +4,7 @@
 #include "polyscope/point_cloud.h"
 #include "polyscope/surface_mesh.h"
 
+#include <fstream>
 #include <iostream>
 #include <unordered_set>
 #include <utility>
@@ -121,6 +122,25 @@ void loadScene()
                 points.push_back(p);
                 vel.push_back(v);
             }
+            break;
+        case 3:
+            std::ifstream file("../meshes/bunny.txt");
+            float x, y, z;
+            while (file >> x >> y >> z) {
+                // Store the floats in a vector and add it to the lines vector
+                points.push_back({x * edgeLen * 4.0, y * edgeLen * 4.0 - 5.0, z * edgeLen * 4.0});
+                vel.push_back({0, 0, 0});
+            }
+            for (int i = 0; i < 30000; ++i) {
+                // Generate a random index within the range of the vector
+                int index = rand() % points.size();
+                
+                // Erase the element at the randomly generated index
+                points.erase(points.begin() + index);
+                vel.erase(vel.begin() + index);
+            }
+            file.close();
+            break;
     }
 }
 
@@ -159,8 +179,7 @@ void dispersal() {
                 }
             }
         }
-        // TODO: Paramaterize
-        double dispersalForce = 2.0;
+        double dispersalForce = params_.dispersalForce;
         for (size_t i = 0; i < blockInds.size(); i++) {
             for (size_t j = i + 1; j < blockInds.size(); j++) {
                 int x = blockInds[i];
@@ -289,8 +308,7 @@ void incompressibility(std::unordered_map<Eigen::Vector3i, double, Vec3Hash> &u,
         if (ind == minCoord || ind == maxCoord) w[iter->first] = 0;
     }
     // Repeatedly enforce incompressibility
-    // TODO: Parameterize
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < params_.iters; i++) {
         for (auto iter = waterCells.begin(); iter != waterCells.end(); iter++) {
             Eigen::Vector3i pt = iter->first;
             double density = iter->second;
@@ -328,8 +346,7 @@ void incompressibility(std::unordered_map<Eigen::Vector3i, double, Vec3Hash> &u,
             }
             pt[2]--;
 
-            // TODO: Add parameterization for density
-            d -= 2.0 * (density - 2.0);
+            d -= params_.density * (density - params_.density);
 
             // Edit d and s
             if (pt[0] != minCoord && pt[0] != maxCoord) {
@@ -416,7 +433,7 @@ void fromgrid(int ind, std::unordered_map<Eigen::Vector3i, double, Vec3Hash> gri
         }
         picvel = picvel / weightSum;
         flipvel = vel[i][ind] + (flipvel / weightSum);
-        double pic = 0.1;
+        double pic = params_.ratio;
         double closeness = std::fabs(points[i][ind] + edgeLen / 2.0);
         if (ind != 1) {
             closeness = std::min(closeness, std::fabs(points[i][ind] - edgeLen / 2.0));
@@ -474,7 +491,6 @@ void callback()
     {
         polyscope::view::resetCameraToHomeView();
     }
-
     if (ImGui::CollapsingHeader("Simulation Control", ImGuiTreeNodeFlags_DefaultOpen))
     {
         if (ImGui::Button("Run/Pause Sim", ImVec2(-1, 0)))
@@ -487,7 +503,12 @@ void callback()
             initSimulation();
         }        
     }
+    ImGui::SliderFloat("FLIP/PIC Ratio", &params_.ratio, 0, 1.0, nullptr, 1.0f);
+    ImGui::SliderInt("Incompressibility Iters", &params_.iters, 1, 20, nullptr, 1.0f);
+    ImGui::SliderFloat("Density", &params_.density, 1.0, 10.0, nullptr, 1.0f);
+    ImGui::SliderFloat("Dispersal Force", &params_.dispersalForce, 0, 10.0, nullptr, 1.0f);
     ImGui::Checkbox("Add Particles", &params_.particleAdditionMode);
+    ImGui::Checkbox("Drag Particles", &params_.particleDragMode);
     if (ImGui::CollapsingHeader("Example Fluids", ImGuiTreeNodeFlags_DefaultOpen)) {
         if (ImGui::Selectable("Corner")) {
             params_.example = 0;
@@ -501,6 +522,10 @@ void callback()
             params_.example = 2;
             loadScene();
         }
+        if (ImGui::Selectable("Bunny")) {
+            params_.example = 3;
+            loadScene();
+        }
     }
 
     ImGuiIO& io = ImGui::GetIO();
@@ -511,7 +536,8 @@ void callback()
         io.DisplayFramebufferScale = ImVec2(2,2); 
     #endif
 
-    if (params_.particleAdditionMode && (io.MouseClicked[0] || ImGui::IsMouseDragging(0))) { 
+    // auto style = polyscope::view::getNavigateStyle();
+    if (params_.particleAdditionMode && (io.MouseClicked[0])) {
         MouseClick mc;
         glm::vec2 screenCoords{ io.MousePos.x, io.MousePos.y };
         int xInd, yInd;
@@ -541,7 +567,6 @@ void callback()
         mc.z = worldPos[2];
         mouseClicks_.push_back(mc);
     }
-
     ImGui::End();
 }
 
@@ -596,8 +621,10 @@ int main(int argc, char **argv)
         {
             MouseClick mc = mouseClicks_.front();
             mouseClicks_.pop_front();
-            points.push_back({mc.x, mc.y, mc.z});
-            vel.push_back({0, 0, 0});
+            for (int i = 0; i < 10; i++) {
+                points.push_back({mc.x + polyscope::randomUnit()/2, mc.y + polyscope::randomUnit()/2, mc.z + polyscope::randomUnit()/2});
+            }
+            for (int i = 0; i < 10; i++) vel.push_back({0, 0, 0});
         }
     }
 
