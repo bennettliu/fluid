@@ -1,4 +1,4 @@
-# Furious Birds Milestone II Starter Code
+# PIC/FLIP Fluid Simulation
 
 
 ## To Build
@@ -16,3 +16,4 @@ cmake -DCMAKE_BUILD_TYPE=Release ..
 ```
 instead.
 
+Both Bennett and Sindhu have completed the course evaluation.

@@ -17,10 +17,10 @@ struct SimParameters
         particleAdditionMode = false;
         particleDragMode = false;
         example = 2;
-        ratio = 0.1;
+        interp = 0.1;
         iters = 10;
         dispersalForce = 2.0;
-        density = 2.0;
+        density = 31.25;
     }
 
     double timeStep;
@@ -35,7 +35,7 @@ struct SimParameters
     bool particleAdditionMode;
     bool particleDragMode;
     int example;
-    float ratio;
+    float interp;
     int iters;
     float dispersalForce;
     float density;

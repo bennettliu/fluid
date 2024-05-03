@@ -76,7 +76,7 @@ void loadScene()
 
     switch(params_.example) {
         // CORNER TEST
-        case 0:
+        case 0: {
             for (size_t i = 0; i < 5000; i++) {
                 Eigen::Vector3d p = {polyscope::randomUnit() * (edgeLen / 4.0) + (edgeLen / 4.0), 
                             polyscope::randomUnit() * edgeLen - (edgeLen / 2.0), 
@@ -86,9 +86,9 @@ void loadScene()
                 vel.push_back(v);
             }
             break;
-
+        }
         // WHIRLPOOL TEST
-        case 1:
+        case 1: {
             for (size_t i = 0; i < 8000; i++) {
                 double x = polyscope::randomUnit() * edgeLen - (edgeLen / 2.0);
                 double y = polyscope::randomUnit() * edgeLen - (edgeLen / 2.0);
@@ -100,7 +100,7 @@ void loadScene()
                 vel.push_back(v);
             }
             break;
-
+        }
         // DROP TEST
         case 2:
             for (size_t i = 0; i < 6000; i++) {
@@ -123,7 +123,7 @@ void loadScene()
                 vel.push_back(v);
             }
             break;
-        case 3:
+        case 3: {
             std::ifstream file("../meshes/bunny.txt");
             float x, y, z;
             while (file >> x >> y >> z) {
@@ -140,6 +140,17 @@ void loadScene()
                 vel.erase(vel.begin() + index);
             }
             file.close();
+            break;
+        }
+        case 4:
+            for (size_t i = 0; i < 5000; i++) {
+                Eigen::Vector3d p = {polyscope::randomUnit() * (edgeLen / 4.0) + (edgeLen / 4.0), 
+                            polyscope::randomUnit() * edgeLen - (edgeLen / 2.0), 
+                            edgeLen / 2.0};
+                Eigen::Vector3d v = {0, 0, 0};
+                points.push_back(p);
+                vel.push_back(v);
+            }
             break;
     }
 }
@@ -311,7 +322,7 @@ void incompressibility(std::unordered_map<Eigen::Vector3i, double, Vec3Hash> &u,
     for (int i = 0; i < params_.iters; i++) {
         for (auto iter = waterCells.begin(); iter != waterCells.end(); iter++) {
             Eigen::Vector3i pt = iter->first;
-            double density = iter->second;
+            double density = iter->second / (voxelLen * voxelLen * voxelLen);
             double d = 0;
             double s = 0;
             // Sum up d and s
@@ -346,7 +357,7 @@ void incompressibility(std::unordered_map<Eigen::Vector3i, double, Vec3Hash> &u,
             }
             pt[2]--;
 
-            d -= params_.density * (density - params_.density);
+            d -= 0.128 * (density - params_.density);
 
             // Edit d and s
             if (pt[0] != minCoord && pt[0] != maxCoord) {
@@ -433,7 +444,7 @@ void fromgrid(int ind, std::unordered_map<Eigen::Vector3i, double, Vec3Hash> gri
         }
         picvel = picvel / weightSum;
         flipvel = vel[i][ind] + (flipvel / weightSum);
-        double pic = params_.ratio;
+        double pic = params_.interp;
         double closeness = std::fabs(points[i][ind] + edgeLen / 2.0);
         if (ind != 1) {
             closeness = std::min(closeness, std::fabs(points[i][ind] - edgeLen / 2.0));
@@ -503,7 +514,7 @@ void callback()
             initSimulation();
         }        
     }
-    ImGui::SliderFloat("FLIP/PIC Ratio", &params_.ratio, 0, 1.0, nullptr, 1.0f);
+    ImGui::SliderFloat("FLIP/PIC Interpolation", &params_.interp, 0, 1.0, nullptr, 1.0f);
     ImGui::SliderInt("Incompressibility Iters", &params_.iters, 1, 20, nullptr, 1.0f);
     ImGui::SliderFloat("Density", &params_.density, 1.0, 10.0, nullptr, 1.0f);
     ImGui::SliderFloat("Dispersal Force", &params_.dispersalForce, 0, 10.0, nullptr, 1.0f);
@@ -524,6 +535,10 @@ void callback()
         }
         if (ImGui::Selectable("Bunny")) {
             params_.example = 3;
+            loadScene();
+        }
+        if (ImGui::Selectable("2D")) {
+            params_.example = 4;
             loadScene();
         }
     }
