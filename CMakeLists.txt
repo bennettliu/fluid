@@ -73,11 +73,9 @@ include(libigl)
 add_executable(
         fluid
         src/main.cpp
-	src/RigidBodyInstance.cpp
-	src/RigidBodyTemplate.cpp
-	src/VectorMath.cpp
+	  src/VectorMath.cpp
 	deps/polyscope/deps/imgui/imgui/misc/cpp/imgui_stdlib.cpp
-        )
+       )
 
 # Include settings
 target_include_directories(fluid PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/deps/libigl/include")

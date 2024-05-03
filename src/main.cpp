@@ -14,8 +14,6 @@
 #include <Eigen/Dense>
 
 #include "SimParameters.h"
-#include "RigidBodyInstance.h"
-#include "RigidBodyTemplate.h"
 #include "VectorMath.h"
 #include <fstream>
 #include "misc/cpp/imgui_stdlib.h"
